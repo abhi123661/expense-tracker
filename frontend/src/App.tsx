@@ -6,10 +6,17 @@ import { EditExpense } from './pages/EditExpense'
 import { History } from './pages/History'
 import { SettingsPage } from './pages/Settings'
 import { ToastProvider } from './components/Toast'
+import { useTheme } from './hooks/useTheme'
+
+function ThemeInitializer() {
+  useTheme()
+  return null
+}
 
 function App() {
   return (
     <ToastProvider>
+      <ThemeInitializer />
       <BrowserRouter>
         <Routes>
           <Route element={<Layout />}>
