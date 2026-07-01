@@ -18,7 +18,7 @@ export function History() {
   const [loadingMore, setLoadingMore] = useState(false)
   const [hasMore, setHasMore] = useState(true)
 
-  // Filters
+  // Filters — draft state (what the user is typing, no fetch triggered)
   const [showFilters, setShowFilters] = useState(false)
   const [search, setSearch] = useState('')
   const [categoryId, setCategoryId] = useState('')
@@ -28,21 +28,26 @@ export function History() {
   const [maxAmount, setMaxAmount] = useState('')
   const [categories, setCategories] = useState<Category[]>([])
 
+  // Applied state — fetch only fires when these change (via Apply button or instant fields)
+  const [appliedSearch, setAppliedSearch] = useState('')
+  const [appliedMin, setAppliedMin] = useState('')
+  const [appliedMax, setAppliedMax] = useState('')
+
   // Sentinel ref for infinite scroll
   const sentinelRef = useRef<HTMLDivElement>(null)
 
-  const activeFilterCount = [search, categoryId, dateFrom, dateTo, minAmount, maxAmount].filter(Boolean).length
+  const activeFilterCount = [appliedSearch, categoryId, dateFrom, dateTo, appliedMin, appliedMax].filter(Boolean).length
 
   const buildParams = useCallback((p: number) => {
     const params: Record<string, string> = { page: String(p), limit: String(PAGE_SIZE) }
-    if (search) params.search = search
+    if (appliedSearch) params.search = appliedSearch
     if (categoryId) params.category_id = categoryId
     if (dateFrom) params.from = dateFrom
     if (dateTo) params.to = dateTo
-    if (minAmount) params.min_amount = minAmount
-    if (maxAmount) params.max_amount = maxAmount
+    if (appliedMin) params.min_amount = appliedMin
+    if (appliedMax) params.max_amount = appliedMax
     return params
-  }, [search, categoryId, dateFrom, dateTo, minAmount, maxAmount])
+  }, [appliedSearch, categoryId, dateFrom, dateTo, appliedMin, appliedMax])
 
   const fetchExpenses = useCallback(async (p: number, append = false) => {
     if (p === 1) setLoading(true)
@@ -66,12 +71,12 @@ export function History() {
     }
   }, [buildParams])
 
-  // Initial load + reload on filter change
+  // Fetch on initial load and whenever applied filters or instant filters change
   useEffect(() => {
     setPage(1)
     setHasMore(true)
     fetchExpenses(1)
-  }, [search, categoryId, dateFrom, dateTo, minAmount, maxAmount])
+  }, [appliedSearch, categoryId, dateFrom, dateTo, appliedMin, appliedMax])
 
   // Infinite scroll observer
   useEffect(() => {
@@ -111,6 +116,12 @@ export function History() {
     }
   }
 
+  const applyFilters = () => {
+    setAppliedSearch(search)
+    setAppliedMin(minAmount)
+    setAppliedMax(maxAmount)
+  }
+
   const clearFilters = () => {
     setSearch('')
     setCategoryId('')
@@ -118,6 +129,9 @@ export function History() {
     setDateTo('')
     setMinAmount('')
     setMaxAmount('')
+    setAppliedSearch('')
+    setAppliedMin('')
+    setAppliedMax('')
   }
 
   if (loading && page === 1) {
@@ -172,6 +186,7 @@ export function History() {
             placeholder="Search notes..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && applyFilters()}
             className="w-full p-2.5 text-sm border border-[var(--border)] rounded-lg bg-[var(--background)] focus:outline-none focus:border-[var(--primary)]"
           />
 
@@ -224,6 +239,14 @@ export function History() {
               className="flex-1 p-2.5 text-sm border border-[var(--border)] rounded-lg bg-[var(--background)] focus:outline-none focus:border-[var(--primary)]"
             />
           </div>
+
+          {/* Apply button for typed filters */}
+          <button
+            onClick={applyFilters}
+            className="w-full py-2.5 bg-[var(--primary)] text-white text-sm font-semibold rounded-lg"
+          >
+            Apply Filters
+          </button>
         </div>
       )}
 
