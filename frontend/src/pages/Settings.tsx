@@ -19,7 +19,7 @@ export function SettingsPage() {
 
   const fetchBudgets = () => {
     api.getBudgets().then((data) => {
-      setBudgets(data)
+      setBudgets(data || [])
       setLoading(false)
     }).catch(() => setLoading(false))
   }
