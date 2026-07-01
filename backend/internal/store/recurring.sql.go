@@ -12,9 +12,9 @@ import (
 )
 
 const createRecurring = `-- name: CreateRecurring :one
-INSERT INTO recurring_expenses (amount, currency, note, category_id, frequency, next_date)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, amount, currency, note, category_id, frequency, next_date, active, created_at, updated_at
+INSERT INTO recurring_expenses (amount, currency, note, category_id, frequency, next_date, user_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING id, amount, currency, note, category_id, frequency, next_date, active, created_at, updated_at, user_id
 `
 
 type CreateRecurringParams struct {
@@ -24,6 +24,7 @@ type CreateRecurringParams struct {
 	CategoryID pgtype.UUID    `json:"category_id"`
 	Frequency  string         `json:"frequency"`
 	NextDate   pgtype.Date    `json:"next_date"`
+	UserID     pgtype.UUID    `json:"user_id"`
 }
 
 func (q *Queries) CreateRecurring(ctx context.Context, arg CreateRecurringParams) (RecurringExpense, error) {
@@ -34,6 +35,7 @@ func (q *Queries) CreateRecurring(ctx context.Context, arg CreateRecurringParams
 		arg.CategoryID,
 		arg.Frequency,
 		arg.NextDate,
+		arg.UserID,
 	)
 	var i RecurringExpense
 	err := row.Scan(
@@ -47,26 +49,37 @@ func (q *Queries) CreateRecurring(ctx context.Context, arg CreateRecurringParams
 		&i.Active,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UserID,
 	)
 	return i, err
 }
 
 const deleteRecurring = `-- name: DeleteRecurring :exec
-DELETE FROM recurring_expenses WHERE id = $1
+DELETE FROM recurring_expenses WHERE id = $1 AND user_id = $2
 `
 
-func (q *Queries) DeleteRecurring(ctx context.Context, id pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, deleteRecurring, id)
+type DeleteRecurringParams struct {
+	ID     pgtype.UUID `json:"id"`
+	UserID pgtype.UUID `json:"user_id"`
+}
+
+func (q *Queries) DeleteRecurring(ctx context.Context, arg DeleteRecurringParams) error {
+	_, err := q.db.Exec(ctx, deleteRecurring, arg.ID, arg.UserID)
 	return err
 }
 
 const getDueRecurring = `-- name: GetDueRecurring :many
-SELECT id, amount, currency, note, category_id, frequency, next_date, active, created_at, updated_at FROM recurring_expenses
-WHERE active = true AND next_date <= $1
+SELECT id, amount, currency, note, category_id, frequency, next_date, active, created_at, updated_at, user_id FROM recurring_expenses
+WHERE active = true AND next_date <= $1 AND user_id = $2
 `
 
-func (q *Queries) GetDueRecurring(ctx context.Context, nextDate pgtype.Date) ([]RecurringExpense, error) {
-	rows, err := q.db.Query(ctx, getDueRecurring, nextDate)
+type GetDueRecurringParams struct {
+	NextDate pgtype.Date `json:"next_date"`
+	UserID   pgtype.UUID `json:"user_id"`
+}
+
+func (q *Queries) GetDueRecurring(ctx context.Context, arg GetDueRecurringParams) ([]RecurringExpense, error) {
+	rows, err := q.db.Query(ctx, getDueRecurring, arg.NextDate, arg.UserID)
 	if err != nil {
 		return nil, err
 	}
@@ -85,6 +98,7 @@ func (q *Queries) GetDueRecurring(ctx context.Context, nextDate pgtype.Date) ([]
 			&i.Active,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.UserID,
 		); err != nil {
 			return nil, err
 		}
@@ -97,9 +111,10 @@ func (q *Queries) GetDueRecurring(ctx context.Context, nextDate pgtype.Date) ([]
 }
 
 const listRecurring = `-- name: ListRecurring :many
-SELECT r.id, r.amount, r.currency, r.note, r.category_id, r.frequency, r.next_date, r.active, r.created_at, r.updated_at, c.name as category_name, c.icon as category_icon, c.color as category_color
+SELECT r.id, r.amount, r.currency, r.note, r.category_id, r.frequency, r.next_date, r.active, r.created_at, r.updated_at, r.user_id, c.name as category_name, c.icon as category_icon, c.color as category_color
 FROM recurring_expenses r
 JOIN categories c ON r.category_id = c.id
+WHERE r.user_id = $1
 ORDER BY r.next_date
 `
 
@@ -114,13 +129,14 @@ type ListRecurringRow struct {
 	Active        pgtype.Bool        `json:"active"`
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	UserID        pgtype.UUID        `json:"user_id"`
 	CategoryName  string             `json:"category_name"`
 	CategoryIcon  pgtype.Text        `json:"category_icon"`
 	CategoryColor pgtype.Text        `json:"category_color"`
 }
 
-func (q *Queries) ListRecurring(ctx context.Context) ([]ListRecurringRow, error) {
-	rows, err := q.db.Query(ctx, listRecurring)
+func (q *Queries) ListRecurring(ctx context.Context, userID pgtype.UUID) ([]ListRecurringRow, error) {
+	rows, err := q.db.Query(ctx, listRecurring, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -139,6 +155,7 @@ func (q *Queries) ListRecurring(ctx context.Context) ([]ListRecurringRow, error)
 			&i.Active,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.UserID,
 			&i.CategoryName,
 			&i.CategoryIcon,
 			&i.CategoryColor,
@@ -156,8 +173,8 @@ func (q *Queries) ListRecurring(ctx context.Context) ([]ListRecurringRow, error)
 const updateRecurring = `-- name: UpdateRecurring :one
 UPDATE recurring_expenses
 SET amount = $1, currency = $2, note = $3, category_id = $4, frequency = $5, next_date = $6, active = $7, updated_at = NOW()
-WHERE id = $8
-RETURNING id, amount, currency, note, category_id, frequency, next_date, active, created_at, updated_at
+WHERE id = $8 AND user_id = $9
+RETURNING id, amount, currency, note, category_id, frequency, next_date, active, created_at, updated_at, user_id
 `
 
 type UpdateRecurringParams struct {
@@ -169,6 +186,7 @@ type UpdateRecurringParams struct {
 	NextDate   pgtype.Date    `json:"next_date"`
 	Active     pgtype.Bool    `json:"active"`
 	ID         pgtype.UUID    `json:"id"`
+	UserID     pgtype.UUID    `json:"user_id"`
 }
 
 func (q *Queries) UpdateRecurring(ctx context.Context, arg UpdateRecurringParams) (RecurringExpense, error) {
@@ -181,6 +199,7 @@ func (q *Queries) UpdateRecurring(ctx context.Context, arg UpdateRecurringParams
 		arg.NextDate,
 		arg.Active,
 		arg.ID,
+		arg.UserID,
 	)
 	var i RecurringExpense
 	err := row.Scan(
@@ -194,6 +213,7 @@ func (q *Queries) UpdateRecurring(ctx context.Context, arg UpdateRecurringParams
 		&i.Active,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UserID,
 	)
 	return i, err
 }

@@ -16,6 +16,7 @@ func (s *Server) ExportExpenses(w http.ResponseWriter, r *http.Request) {
 
 	// Build filter params (same as ListExpenses but without pagination limit)
 	params := store.ListExpensesParams{
+		UserID:      GetUserID(r.Context()),
 		QueryLimit:  10000, // Export all (reasonable cap)
 		QueryOffset: 0,
 	}

@@ -10,15 +10,17 @@ import (
 
 // Server holds shared dependencies for all handlers
 type Server struct {
-	queries *store.Queries
-	pool    *pgxpool.Pool
+	queries   *store.Queries
+	pool      *pgxpool.Pool
+	JWTSecret []byte
 }
 
 // NewServer creates a new Server with database access
-func NewServer(pool *pgxpool.Pool) *Server {
+func NewServer(pool *pgxpool.Pool, jwtSecret string) *Server {
 	return &Server{
-		queries: store.New(pool),
-		pool:    pool,
+		queries:   store.New(pool),
+		pool:      pool,
+		JWTSecret: []byte(jwtSecret),
 	}
 }
 

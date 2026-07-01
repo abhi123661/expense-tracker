@@ -61,7 +61,9 @@ func (s *Server) GetSummary(w http.ResponseWriter, r *http.Request) {
 	end := pgtype.Date{Time: endDate, Valid: true}
 
 	// Get overall summary
+	userID := GetUserID(r.Context())
 	summary, err := s.queries.GetMonthlySummary(r.Context(), store.GetMonthlySummaryParams{
+		UserID: userID,
 		Date:   start,
 		Date_2: end,
 	})
@@ -72,6 +74,7 @@ func (s *Server) GetSummary(w http.ResponseWriter, r *http.Request) {
 
 	// Get category breakdown
 	categories, err := s.queries.GetCategorySummary(r.Context(), store.GetCategorySummaryParams{
+		UserID: userID,
 		Date:   start,
 		Date_2: end,
 	})
@@ -82,6 +85,7 @@ func (s *Server) GetSummary(w http.ResponseWriter, r *http.Request) {
 
 	// Get daily spending
 	daily, err := s.queries.GetDailySpending(r.Context(), store.GetDailySpendingParams{
+		UserID: userID,
 		Date:   start,
 		Date_2: end,
 	})

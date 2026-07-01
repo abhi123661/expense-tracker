@@ -12,19 +12,25 @@ import (
 )
 
 const createCategory = `-- name: CreateCategory :one
-INSERT INTO categories (name, icon, color, is_default)
-VALUES ($1, $2, $3, false)
-RETURNING id, name, icon, color, is_default, created_at, updated_at
+INSERT INTO categories (name, icon, color, is_default, user_id)
+VALUES ($1, $2, $3, false, $4)
+RETURNING id, name, icon, color, is_default, created_at, updated_at, user_id
 `
 
 type CreateCategoryParams struct {
-	Name  string      `json:"name"`
-	Icon  pgtype.Text `json:"icon"`
-	Color pgtype.Text `json:"color"`
+	Name   string      `json:"name"`
+	Icon   pgtype.Text `json:"icon"`
+	Color  pgtype.Text `json:"color"`
+	UserID pgtype.UUID `json:"user_id"`
 }
 
 func (q *Queries) CreateCategory(ctx context.Context, arg CreateCategoryParams) (Category, error) {
-	row := q.db.QueryRow(ctx, createCategory, arg.Name, arg.Icon, arg.Color)
+	row := q.db.QueryRow(ctx, createCategory,
+		arg.Name,
+		arg.Icon,
+		arg.Color,
+		arg.UserID,
+	)
 	var i Category
 	err := row.Scan(
 		&i.ID,
@@ -34,21 +40,27 @@ func (q *Queries) CreateCategory(ctx context.Context, arg CreateCategoryParams) 
 		&i.IsDefault,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UserID,
 	)
 	return i, err
 }
 
 const deleteCategory = `-- name: DeleteCategory :exec
-DELETE FROM categories WHERE id = $1 AND is_default = false
+DELETE FROM categories WHERE id = $1 AND is_default = false AND user_id = $2
 `
 
-func (q *Queries) DeleteCategory(ctx context.Context, id pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, deleteCategory, id)
+type DeleteCategoryParams struct {
+	ID     pgtype.UUID `json:"id"`
+	UserID pgtype.UUID `json:"user_id"`
+}
+
+func (q *Queries) DeleteCategory(ctx context.Context, arg DeleteCategoryParams) error {
+	_, err := q.db.Exec(ctx, deleteCategory, arg.ID, arg.UserID)
 	return err
 }
 
 const getCategory = `-- name: GetCategory :one
-SELECT id, name, icon, color, is_default, created_at, updated_at FROM categories WHERE id = $1
+SELECT id, name, icon, color, is_default, created_at, updated_at, user_id FROM categories WHERE id = $1
 `
 
 func (q *Queries) GetCategory(ctx context.Context, id pgtype.UUID) (Category, error) {
@@ -62,16 +74,19 @@ func (q *Queries) GetCategory(ctx context.Context, id pgtype.UUID) (Category, er
 		&i.IsDefault,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UserID,
 	)
 	return i, err
 }
 
 const listCategories = `-- name: ListCategories :many
-SELECT id, name, icon, color, is_default, created_at, updated_at FROM categories ORDER BY is_default DESC, name ASC
+SELECT id, name, icon, color, is_default, created_at, updated_at, user_id FROM categories
+WHERE is_default = true OR user_id = $1
+ORDER BY is_default DESC, name ASC
 `
 
-func (q *Queries) ListCategories(ctx context.Context) ([]Category, error) {
-	rows, err := q.db.Query(ctx, listCategories)
+func (q *Queries) ListCategories(ctx context.Context, userID pgtype.UUID) ([]Category, error) {
+	rows, err := q.db.Query(ctx, listCategories, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -87,6 +102,7 @@ func (q *Queries) ListCategories(ctx context.Context) ([]Category, error) {
 			&i.IsDefault,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.UserID,
 		); err != nil {
 			return nil, err
 		}
@@ -101,15 +117,16 @@ func (q *Queries) ListCategories(ctx context.Context) ([]Category, error) {
 const updateCategory = `-- name: UpdateCategory :one
 UPDATE categories
 SET name = $1, icon = $2, color = $3, updated_at = NOW()
-WHERE id = $4 AND is_default = false
-RETURNING id, name, icon, color, is_default, created_at, updated_at
+WHERE id = $4 AND is_default = false AND user_id = $5
+RETURNING id, name, icon, color, is_default, created_at, updated_at, user_id
 `
 
 type UpdateCategoryParams struct {
-	Name  string      `json:"name"`
-	Icon  pgtype.Text `json:"icon"`
-	Color pgtype.Text `json:"color"`
-	ID    pgtype.UUID `json:"id"`
+	Name   string      `json:"name"`
+	Icon   pgtype.Text `json:"icon"`
+	Color  pgtype.Text `json:"color"`
+	ID     pgtype.UUID `json:"id"`
+	UserID pgtype.UUID `json:"user_id"`
 }
 
 func (q *Queries) UpdateCategory(ctx context.Context, arg UpdateCategoryParams) (Category, error) {
@@ -118,6 +135,7 @@ func (q *Queries) UpdateCategory(ctx context.Context, arg UpdateCategoryParams) 
 		arg.Icon,
 		arg.Color,
 		arg.ID,
+		arg.UserID,
 	)
 	var i Category
 	err := row.Scan(
@@ -128,6 +146,7 @@ func (q *Queries) UpdateCategory(ctx context.Context, arg UpdateCategoryParams) 
 		&i.IsDefault,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UserID,
 	)
 	return i, err
 }

@@ -1,10 +1,24 @@
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080'
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const token = localStorage.getItem('auth_token')
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+
   const res = await fetch(`${API_URL}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     ...options,
   })
+
+  if (res.status === 401) {
+    localStorage.removeItem('auth_token')
+    localStorage.removeItem('auth_user')
+    window.location.href = '/login'
+    throw new Error('Session expired')
+  }
+
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: 'Request failed' }))
     throw new Error(err.error || `HTTP ${res.status}`)
@@ -15,6 +29,8 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 export const api = {
   // Categories
   getCategories: () => request<import('./types').Category[]>('/api/categories'),
+  createCategory: (data: { name: string; icon: string; color: string }) =>
+    request<import('./types').Category>('/api/categories', { method: 'POST', body: JSON.stringify(data) }),
 
   // Expenses
   getExpenses: (params?: Record<string, string>) => {
@@ -59,4 +75,14 @@ export const api = {
     const query = params ? '?' + new URLSearchParams(params).toString() : ''
     return `${API_URL}/api/expenses/export${query}`
   },
+
+  // Auth
+  signup: (data: { email: string; password: string; name: string }) =>
+    request<{ token: string; user: { id: string; email: string; name: string } }>('/api/auth/signup', {
+      method: 'POST', body: JSON.stringify(data),
+    }),
+  login: (data: { email: string; password: string }) =>
+    request<{ token: string; user: { id: string; email: string; name: string } }>('/api/auth/login', {
+      method: 'POST', body: JSON.stringify(data),
+    }),
 }

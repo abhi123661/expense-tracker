@@ -2,13 +2,17 @@ import { useEffect, useState } from 'react'
 import { api } from '../lib/api'
 import { formatCurrency } from '../lib/utils'
 import type { Budget, Category } from '../lib/types'
-import { Download, Moon, Plus, Sun, Trash2, X } from 'lucide-react'
+import { Download, LogOut, Moon, Plus, Sun, Trash2, X } from 'lucide-react'
 import { useToast } from '../components/Toast'
 import { useTheme } from '../hooks/useTheme'
+import { useAuth } from '../hooks/useAuth'
+import { useNavigate } from 'react-router-dom'
 
 export function SettingsPage() {
   const { toast } = useToast()
   const { theme, setTheme } = useTheme()
+  const { user, logout } = useAuth()
+  const navigate = useNavigate()
   const [budgets, setBudgets] = useState<Budget[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -223,6 +227,126 @@ export function SettingsPage() {
           </div>
         )}
       </div>
+
+      {/* Custom Categories */}
+      <CategoryCreator />
+
+      {/* Account */}
+      <div>
+        <h2 className="text-sm font-semibold text-[var(--muted-foreground)] mb-2">Account</h2>
+        {user && (
+          <p className="text-sm text-[var(--muted-foreground)] mb-2">
+            Signed in as <span className="font-medium text-[var(--foreground)]">{user.email}</span>
+          </p>
+        )}
+        <button
+          onClick={() => { logout(); navigate('/login') }}
+          className="flex items-center gap-2 w-full p-4 bg-[var(--muted)] rounded-xl hover:opacity-80 transition-opacity text-[var(--destructive)]"
+        >
+          <LogOut size={20} />
+          <span className="font-medium">Sign Out</span>
+        </button>
+      </div>
+    </div>
+  )
+}
+
+const PALETTE = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899']
+
+function CategoryCreator() {
+  const { toast } = useToast()
+  const [showForm, setShowForm] = useState(false)
+  const [name, setName] = useState('')
+  const [icon, setIcon] = useState('')
+  const [color, setColor] = useState(PALETTE[0])
+  const [saving, setSaving] = useState(false)
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!name.trim()) return
+
+    setSaving(true)
+    try {
+      await api.createCategory({ name: name.trim(), icon: icon || '📁', color })
+      toast('Category created!')
+      setShowForm(false)
+      setName('')
+      setIcon('')
+      setColor(PALETTE[0])
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Failed to create category', 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div>
+      <div className="flex justify-between items-center mb-2">
+        <h2 className="text-sm font-semibold text-[var(--muted-foreground)]">Custom Categories</h2>
+        {!showForm && (
+          <button
+            onClick={() => setShowForm(true)}
+            className="flex items-center gap-1 text-xs font-medium text-[var(--primary)]"
+          >
+            <Plus size={14} /> New
+          </button>
+        )}
+      </div>
+
+      {showForm ? (
+        <form onSubmit={handleCreate} className="bg-[var(--muted)] p-4 rounded-xl flex flex-col gap-3">
+          <div className="flex justify-between items-center">
+            <span className="text-sm font-medium">New Category</span>
+            <button type="button" onClick={() => setShowForm(false)} className="text-[var(--muted-foreground)]">
+              <X size={16} />
+            </button>
+          </div>
+
+          <div className="flex gap-2">
+            <input
+              type="text"
+              placeholder="Emoji"
+              value={icon}
+              onChange={(e) => setIcon(e.target.value)}
+              className="w-16 p-2.5 text-center text-lg border border-[var(--border)] rounded-lg bg-[var(--background)] focus:outline-none focus:border-[var(--primary)]"
+              maxLength={2}
+            />
+            <input
+              type="text"
+              placeholder="Category name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="flex-1 p-2.5 border border-[var(--border)] rounded-lg bg-[var(--background)] focus:outline-none focus:border-[var(--primary)]"
+            />
+          </div>
+
+          {/* Color picker */}
+          <div className="flex gap-2 flex-wrap">
+            {PALETTE.map((c) => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => setColor(c)}
+                className={`w-8 h-8 rounded-full transition-transform ${color === c ? 'scale-125 ring-2 ring-offset-2 ring-[var(--primary)]' : ''}`}
+                style={{ backgroundColor: c }}
+              />
+            ))}
+          </div>
+
+          <button
+            type="submit"
+            disabled={saving || !name.trim()}
+            className="w-full py-3 bg-[var(--primary)] text-white font-semibold rounded-xl disabled:opacity-50"
+          >
+            {saving ? 'Creating...' : 'Create Category'}
+          </button>
+        </form>
+      ) : (
+        <p className="text-sm text-[var(--muted-foreground)] bg-[var(--muted)] p-4 rounded-xl">
+          Create custom categories with your own emoji and color.
+        </p>
+      )}
     </div>
   )
 }

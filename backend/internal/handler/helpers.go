@@ -18,6 +18,11 @@ func parseUUID(s string) (pgtype.UUID, error) {
 	return pgtype.UUID{Bytes: id, Valid: true}, nil
 }
 
+// formatUUID converts a pgtype.UUID to its string representation
+func formatUUID(u pgtype.UUID) string {
+	return uuid.UUID(u.Bytes).String()
+}
+
 // numericToFloat converts pgtype.Numeric to float64
 func numericToFloat(n pgtype.Numeric) (float64, error) {
 	if !n.Valid {

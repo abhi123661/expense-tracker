@@ -12,7 +12,7 @@ import (
 
 // ListBudgets returns all budgets with spent amounts
 func (s *Server) ListBudgets(w http.ResponseWriter, r *http.Request) {
-	budgets, err := s.queries.ListBudgets(r.Context())
+	budgets, err := s.queries.ListBudgets(r.Context(), GetUserID(r.Context()))
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Failed to fetch budgets")
 		return
@@ -44,6 +44,7 @@ func (s *Server) ListBudgets(w http.ResponseWriter, r *http.Request) {
 
 		spent, err := s.queries.GetBudgetSpent(r.Context(), store.GetBudgetSpentParams{
 			CategoryID: b.CategoryID,
+			UserID:     GetUserID(r.Context()),
 			Date:       pgtype.Date{Time: startDate, Valid: true},
 			Date_2:     pgtype.Date{Time: endDate, Valid: true},
 		})
@@ -114,6 +115,7 @@ func (s *Server) CreateBudget(w http.ResponseWriter, r *http.Request) {
 		Amount:     numericFromFloat(req.Amount),
 		Currency:   req.Currency,
 		Period:     req.Period,
+		UserID:     GetUserID(r.Context()),
 	})
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to create budget: %v", err))
@@ -131,7 +133,10 @@ func (s *Server) DeleteBudget(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = s.queries.DeleteBudget(r.Context(), uuid)
+	err = s.queries.DeleteBudget(r.Context(), store.DeleteBudgetParams{
+		ID:     uuid,
+		UserID: GetUserID(r.Context()),
+	})
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Failed to delete budget")
 		return

@@ -12,11 +12,9 @@ import (
 )
 
 const createBudget = `-- name: CreateBudget :one
-INSERT INTO budgets (category_id, amount, currency, period)
-VALUES ($1, $2, $3, $4)
-ON CONFLICT (category_id, period)
-DO UPDATE SET amount = EXCLUDED.amount, currency = EXCLUDED.currency, updated_at = NOW()
-RETURNING id, category_id, amount, currency, period, created_at, updated_at
+INSERT INTO budgets (category_id, amount, currency, period, user_id)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, category_id, amount, currency, period, created_at, updated_at, user_id
 `
 
 type CreateBudgetParams struct {
@@ -24,6 +22,7 @@ type CreateBudgetParams struct {
 	Amount     pgtype.Numeric `json:"amount"`
 	Currency   string         `json:"currency"`
 	Period     string         `json:"period"`
+	UserID     pgtype.UUID    `json:"user_id"`
 }
 
 func (q *Queries) CreateBudget(ctx context.Context, arg CreateBudgetParams) (Budget, error) {
@@ -32,6 +31,7 @@ func (q *Queries) CreateBudget(ctx context.Context, arg CreateBudgetParams) (Bud
 		arg.Amount,
 		arg.Currency,
 		arg.Period,
+		arg.UserID,
 	)
 	var i Budget
 	err := row.Scan(
@@ -42,16 +42,22 @@ func (q *Queries) CreateBudget(ctx context.Context, arg CreateBudgetParams) (Bud
 		&i.Period,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UserID,
 	)
 	return i, err
 }
 
 const deleteBudget = `-- name: DeleteBudget :exec
-DELETE FROM budgets WHERE id = $1
+DELETE FROM budgets WHERE id = $1 AND user_id = $2
 `
 
-func (q *Queries) DeleteBudget(ctx context.Context, id pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, deleteBudget, id)
+type DeleteBudgetParams struct {
+	ID     pgtype.UUID `json:"id"`
+	UserID pgtype.UUID `json:"user_id"`
+}
+
+func (q *Queries) DeleteBudget(ctx context.Context, arg DeleteBudgetParams) error {
+	_, err := q.db.Exec(ctx, deleteBudget, arg.ID, arg.UserID)
 	return err
 }
 
@@ -59,27 +65,35 @@ const getBudgetSpent = `-- name: GetBudgetSpent :one
 SELECT COALESCE(SUM(e.amount), 0)::decimal as spent
 FROM expenses e
 WHERE e.category_id = $1
-    AND e.date >= $2
-    AND e.date <= $3
+    AND e.user_id = $2
+    AND e.date >= $3
+    AND e.date <= $4
 `
 
 type GetBudgetSpentParams struct {
 	CategoryID pgtype.UUID `json:"category_id"`
+	UserID     pgtype.UUID `json:"user_id"`
 	Date       pgtype.Date `json:"date"`
 	Date_2     pgtype.Date `json:"date_2"`
 }
 
 func (q *Queries) GetBudgetSpent(ctx context.Context, arg GetBudgetSpentParams) (pgtype.Numeric, error) {
-	row := q.db.QueryRow(ctx, getBudgetSpent, arg.CategoryID, arg.Date, arg.Date_2)
+	row := q.db.QueryRow(ctx, getBudgetSpent,
+		arg.CategoryID,
+		arg.UserID,
+		arg.Date,
+		arg.Date_2,
+	)
 	var spent pgtype.Numeric
 	err := row.Scan(&spent)
 	return spent, err
 }
 
 const listBudgets = `-- name: ListBudgets :many
-SELECT b.id, b.category_id, b.amount, b.currency, b.period, b.created_at, b.updated_at, c.name as category_name, c.icon as category_icon, c.color as category_color
+SELECT b.id, b.category_id, b.amount, b.currency, b.period, b.created_at, b.updated_at, b.user_id, c.name as category_name, c.icon as category_icon, c.color as category_color
 FROM budgets b
 JOIN categories c ON b.category_id = c.id
+WHERE b.user_id = $1
 ORDER BY c.name
 `
 
@@ -91,13 +105,14 @@ type ListBudgetsRow struct {
 	Period        string             `json:"period"`
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	UserID        pgtype.UUID        `json:"user_id"`
 	CategoryName  string             `json:"category_name"`
 	CategoryIcon  pgtype.Text        `json:"category_icon"`
 	CategoryColor pgtype.Text        `json:"category_color"`
 }
 
-func (q *Queries) ListBudgets(ctx context.Context) ([]ListBudgetsRow, error) {
-	rows, err := q.db.Query(ctx, listBudgets)
+func (q *Queries) ListBudgets(ctx context.Context, userID pgtype.UUID) ([]ListBudgetsRow, error) {
+	rows, err := q.db.Query(ctx, listBudgets, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -113,6 +128,7 @@ func (q *Queries) ListBudgets(ctx context.Context) ([]ListBudgetsRow, error) {
 			&i.Period,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.UserID,
 			&i.CategoryName,
 			&i.CategoryIcon,
 			&i.CategoryColor,

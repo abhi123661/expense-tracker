@@ -65,38 +65,51 @@ func main() {
 	})
 
 	// Initialize handlers
-	srv := handler.NewServer(pool)
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		jwtSecret = "dev-secret-change-in-production"
+	}
+	srv := handler.NewServer(pool, jwtSecret)
 
 	// API routes
 	r.Route("/api", func(r chi.Router) {
-		// Categories
-		r.Get("/categories", srv.ListCategories)
-		r.Post("/categories", srv.CreateCategory)
-		r.Put("/categories/{id}", srv.UpdateCategory)
-		r.Delete("/categories/{id}", srv.DeleteCategory)
+		// Public auth routes (no middleware)
+		r.Post("/auth/signup", srv.Signup)
+		r.Post("/auth/login", srv.Login)
 
-		// Expenses
-		r.Post("/expenses", srv.CreateExpense)
-		r.Get("/expenses", srv.ListExpenses)
-		r.Get("/expenses/export", srv.ExportExpenses)
-		r.Get("/expenses/{id}", srv.GetExpense)
-		r.Put("/expenses/{id}", srv.UpdateExpense)
-		r.Delete("/expenses/{id}", srv.DeleteExpense)
+		// Protected routes (require JWT)
+		r.Group(func(r chi.Router) {
+			r.Use(srv.AuthMiddleware)
 
-		// Budgets
-		r.Get("/budgets", srv.ListBudgets)
-		r.Post("/budgets", srv.CreateBudget)
-		r.Delete("/budgets/{id}", srv.DeleteBudget)
+			// Categories
+			r.Get("/categories", srv.ListCategories)
+			r.Post("/categories", srv.CreateCategory)
+			r.Put("/categories/{id}", srv.UpdateCategory)
+			r.Delete("/categories/{id}", srv.DeleteCategory)
 
-		// Recurring expenses
-		r.Get("/recurring", srv.ListRecurring)
-		r.Post("/recurring", srv.CreateRecurring)
-		r.Put("/recurring/{id}", srv.UpdateRecurring)
-		r.Delete("/recurring/{id}", srv.DeleteRecurring)
-		r.Post("/recurring/process", srv.ProcessRecurring)
+			// Expenses
+			r.Post("/expenses", srv.CreateExpense)
+			r.Get("/expenses", srv.ListExpenses)
+			r.Get("/expenses/export", srv.ExportExpenses)
+			r.Get("/expenses/{id}", srv.GetExpense)
+			r.Put("/expenses/{id}", srv.UpdateExpense)
+			r.Delete("/expenses/{id}", srv.DeleteExpense)
 
-		// Summary/Dashboard
-		r.Get("/summary", srv.GetSummary)
+			// Budgets
+			r.Get("/budgets", srv.ListBudgets)
+			r.Post("/budgets", srv.CreateBudget)
+			r.Delete("/budgets/{id}", srv.DeleteBudget)
+
+			// Recurring expenses
+			r.Get("/recurring", srv.ListRecurring)
+			r.Post("/recurring", srv.CreateRecurring)
+			r.Put("/recurring/{id}", srv.UpdateRecurring)
+			r.Delete("/recurring/{id}", srv.DeleteRecurring)
+			r.Post("/recurring/process", srv.ProcessRecurring)
+
+			// Summary/Dashboard
+			r.Get("/summary", srv.GetSummary)
+		})
 	})
 
 	// Start server

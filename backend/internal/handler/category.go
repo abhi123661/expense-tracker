@@ -10,7 +10,7 @@ import (
 
 // ListCategories returns all categories
 func (s *Server) ListCategories(w http.ResponseWriter, r *http.Request) {
-	categories, err := s.queries.ListCategories(r.Context())
+	categories, err := s.queries.ListCategories(r.Context(), GetUserID(r.Context()))
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Failed to fetch categories")
 		return
@@ -35,9 +35,10 @@ func (s *Server) CreateCategory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	category, err := s.queries.CreateCategory(r.Context(), store.CreateCategoryParams{
-		Name:  req.Name,
-		Icon:  pgtype.Text{String: req.Icon, Valid: req.Icon != ""},
-		Color: pgtype.Text{String: req.Color, Valid: req.Color != ""},
+		Name:   req.Name,
+		Icon:   pgtype.Text{String: req.Icon, Valid: req.Icon != ""},
+		Color:  pgtype.Text{String: req.Color, Valid: req.Color != ""},
+		UserID: GetUserID(r.Context()),
 	})
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Failed to create category")
@@ -70,10 +71,11 @@ func (s *Server) UpdateCategory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	category, err := s.queries.UpdateCategory(r.Context(), store.UpdateCategoryParams{
-		Name:  req.Name,
-		Icon:  pgtype.Text{String: req.Icon, Valid: req.Icon != ""},
-		Color: pgtype.Text{String: req.Color, Valid: req.Color != ""},
-		ID:    uuid,
+		Name:   req.Name,
+		Icon:   pgtype.Text{String: req.Icon, Valid: req.Icon != ""},
+		Color:  pgtype.Text{String: req.Color, Valid: req.Color != ""},
+		ID:     uuid,
+		UserID: GetUserID(r.Context()),
 	})
 	if err != nil {
 		respondError(w, http.StatusNotFound, "Category not found or is a default category")
@@ -91,7 +93,10 @@ func (s *Server) DeleteCategory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = s.queries.DeleteCategory(r.Context(), uuid)
+	err = s.queries.DeleteCategory(r.Context(), store.DeleteCategoryParams{
+		ID:     uuid,
+		UserID: GetUserID(r.Context()),
+	})
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Failed to delete category (may have linked expenses)")
 		return

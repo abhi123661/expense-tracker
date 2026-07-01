@@ -20,13 +20,15 @@ SELECT
     COALESCE(SUM(e.amount), 0)::decimal as total_spent,
     COUNT(e.id) as expense_count
 FROM categories c
-LEFT JOIN expenses e ON c.id = e.category_id AND e.date >= $1 AND e.date <= $2
+LEFT JOIN expenses e ON c.id = e.category_id AND e.date >= $2 AND e.date <= $3 AND e.user_id = $1
+WHERE (c.is_default = true OR c.user_id = $1)
 GROUP BY c.id, c.name, c.icon, c.color
 HAVING COUNT(e.id) > 0
 ORDER BY total_spent DESC
 `
 
 type GetCategorySummaryParams struct {
+	UserID pgtype.UUID `json:"user_id"`
 	Date   pgtype.Date `json:"date"`
 	Date_2 pgtype.Date `json:"date_2"`
 }
@@ -41,7 +43,7 @@ type GetCategorySummaryRow struct {
 }
 
 func (q *Queries) GetCategorySummary(ctx context.Context, arg GetCategorySummaryParams) ([]GetCategorySummaryRow, error) {
-	rows, err := q.db.Query(ctx, getCategorySummary, arg.Date, arg.Date_2)
+	rows, err := q.db.Query(ctx, getCategorySummary, arg.UserID, arg.Date, arg.Date_2)
 	if err != nil {
 		return nil, err
 	}
@@ -72,12 +74,13 @@ SELECT
     e.date,
     COALESCE(SUM(e.amount), 0)::decimal as total_spent
 FROM expenses e
-WHERE e.date >= $1 AND e.date <= $2
+WHERE e.user_id = $1 AND e.date >= $2 AND e.date <= $3
 GROUP BY e.date
 ORDER BY e.date
 `
 
 type GetDailySpendingParams struct {
+	UserID pgtype.UUID `json:"user_id"`
 	Date   pgtype.Date `json:"date"`
 	Date_2 pgtype.Date `json:"date_2"`
 }
@@ -88,7 +91,7 @@ type GetDailySpendingRow struct {
 }
 
 func (q *Queries) GetDailySpending(ctx context.Context, arg GetDailySpendingParams) ([]GetDailySpendingRow, error) {
-	rows, err := q.db.Query(ctx, getDailySpending, arg.Date, arg.Date_2)
+	rows, err := q.db.Query(ctx, getDailySpending, arg.UserID, arg.Date, arg.Date_2)
 	if err != nil {
 		return nil, err
 	}
@@ -113,10 +116,11 @@ SELECT
     COALESCE(AVG(amount), 0)::decimal as avg_expense,
     COUNT(*) as total_count
 FROM expenses
-WHERE date >= $1 AND date <= $2
+WHERE user_id = $1 AND date >= $2 AND date <= $3
 `
 
 type GetMonthlySummaryParams struct {
+	UserID pgtype.UUID `json:"user_id"`
 	Date   pgtype.Date `json:"date"`
 	Date_2 pgtype.Date `json:"date_2"`
 }
@@ -128,7 +132,7 @@ type GetMonthlySummaryRow struct {
 }
 
 func (q *Queries) GetMonthlySummary(ctx context.Context, arg GetMonthlySummaryParams) (GetMonthlySummaryRow, error) {
-	row := q.db.QueryRow(ctx, getMonthlySummary, arg.Date, arg.Date_2)
+	row := q.db.QueryRow(ctx, getMonthlySummary, arg.UserID, arg.Date, arg.Date_2)
 	var i GetMonthlySummaryRow
 	err := row.Scan(&i.TotalSpent, &i.AvgExpense, &i.TotalCount)
 	return i, err

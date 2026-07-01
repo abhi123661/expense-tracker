@@ -14,15 +14,17 @@ import (
 const countExpenses = `-- name: CountExpenses :one
 SELECT COUNT(*) FROM expenses e
 WHERE
-    ($1::date IS NULL OR e.date >= $1::date)
-    AND ($2::date IS NULL OR e.date <= $2::date)
-    AND ($3::uuid IS NULL OR e.category_id = $3::uuid)
-    AND ($4::decimal IS NULL OR e.amount >= $4::decimal)
-    AND ($5::decimal IS NULL OR e.amount <= $5::decimal)
-    AND ($6::text IS NULL OR e.note ILIKE '%' || $6::text || '%')
+    e.user_id = $1::uuid
+    AND ($2::date IS NULL OR e.date >= $2::date)
+    AND ($3::date IS NULL OR e.date <= $3::date)
+    AND ($4::uuid IS NULL OR e.category_id = $4::uuid)
+    AND ($5::decimal IS NULL OR e.amount >= $5::decimal)
+    AND ($6::decimal IS NULL OR e.amount <= $6::decimal)
+    AND ($7::text IS NULL OR e.note ILIKE '%' || $7::text || '%')
 `
 
 type CountExpensesParams struct {
+	UserID     pgtype.UUID    `json:"user_id"`
 	FromDate   pgtype.Date    `json:"from_date"`
 	ToDate     pgtype.Date    `json:"to_date"`
 	CategoryID pgtype.UUID    `json:"category_id"`
@@ -33,6 +35,7 @@ type CountExpensesParams struct {
 
 func (q *Queries) CountExpenses(ctx context.Context, arg CountExpensesParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countExpenses,
+		arg.UserID,
 		arg.FromDate,
 		arg.ToDate,
 		arg.CategoryID,
@@ -46,9 +49,9 @@ func (q *Queries) CountExpenses(ctx context.Context, arg CountExpensesParams) (i
 }
 
 const createExpense = `-- name: CreateExpense :one
-INSERT INTO expenses (amount, currency, note, category_id, date)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING id, amount, currency, note, category_id, date, created_at, updated_at
+INSERT INTO expenses (amount, currency, note, category_id, date, user_id)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, amount, currency, note, category_id, date, created_at, updated_at, user_id
 `
 
 type CreateExpenseParams struct {
@@ -57,6 +60,7 @@ type CreateExpenseParams struct {
 	Note       pgtype.Text    `json:"note"`
 	CategoryID pgtype.UUID    `json:"category_id"`
 	Date       pgtype.Date    `json:"date"`
+	UserID     pgtype.UUID    `json:"user_id"`
 }
 
 func (q *Queries) CreateExpense(ctx context.Context, arg CreateExpenseParams) (Expense, error) {
@@ -66,6 +70,7 @@ func (q *Queries) CreateExpense(ctx context.Context, arg CreateExpenseParams) (E
 		arg.Note,
 		arg.CategoryID,
 		arg.Date,
+		arg.UserID,
 	)
 	var i Expense
 	err := row.Scan(
@@ -77,25 +82,36 @@ func (q *Queries) CreateExpense(ctx context.Context, arg CreateExpenseParams) (E
 		&i.Date,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UserID,
 	)
 	return i, err
 }
 
 const deleteExpense = `-- name: DeleteExpense :exec
-DELETE FROM expenses WHERE id = $1
+DELETE FROM expenses WHERE id = $1 AND user_id = $2
 `
 
-func (q *Queries) DeleteExpense(ctx context.Context, id pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, deleteExpense, id)
+type DeleteExpenseParams struct {
+	ID     pgtype.UUID `json:"id"`
+	UserID pgtype.UUID `json:"user_id"`
+}
+
+func (q *Queries) DeleteExpense(ctx context.Context, arg DeleteExpenseParams) error {
+	_, err := q.db.Exec(ctx, deleteExpense, arg.ID, arg.UserID)
 	return err
 }
 
 const getExpense = `-- name: GetExpense :one
-SELECT e.id, e.amount, e.currency, e.note, e.category_id, e.date, e.created_at, e.updated_at, c.name as category_name, c.icon as category_icon, c.color as category_color
+SELECT e.id, e.amount, e.currency, e.note, e.category_id, e.date, e.created_at, e.updated_at, e.user_id, c.name as category_name, c.icon as category_icon, c.color as category_color
 FROM expenses e
 JOIN categories c ON e.category_id = c.id
-WHERE e.id = $1
+WHERE e.id = $1 AND e.user_id = $2
 `
+
+type GetExpenseParams struct {
+	ID     pgtype.UUID `json:"id"`
+	UserID pgtype.UUID `json:"user_id"`
+}
 
 type GetExpenseRow struct {
 	ID            pgtype.UUID        `json:"id"`
@@ -106,13 +122,14 @@ type GetExpenseRow struct {
 	Date          pgtype.Date        `json:"date"`
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	UserID        pgtype.UUID        `json:"user_id"`
 	CategoryName  string             `json:"category_name"`
 	CategoryIcon  pgtype.Text        `json:"category_icon"`
 	CategoryColor pgtype.Text        `json:"category_color"`
 }
 
-func (q *Queries) GetExpense(ctx context.Context, id pgtype.UUID) (GetExpenseRow, error) {
-	row := q.db.QueryRow(ctx, getExpense, id)
+func (q *Queries) GetExpense(ctx context.Context, arg GetExpenseParams) (GetExpenseRow, error) {
+	row := q.db.QueryRow(ctx, getExpense, arg.ID, arg.UserID)
 	var i GetExpenseRow
 	err := row.Scan(
 		&i.ID,
@@ -123,6 +140,7 @@ func (q *Queries) GetExpense(ctx context.Context, id pgtype.UUID) (GetExpenseRow
 		&i.Date,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UserID,
 		&i.CategoryName,
 		&i.CategoryIcon,
 		&i.CategoryColor,
@@ -131,22 +149,24 @@ func (q *Queries) GetExpense(ctx context.Context, id pgtype.UUID) (GetExpenseRow
 }
 
 const listExpenses = `-- name: ListExpenses :many
-SELECT e.id, e.amount, e.currency, e.note, e.category_id, e.date, e.created_at, e.updated_at, c.name as category_name, c.icon as category_icon, c.color as category_color
+SELECT e.id, e.amount, e.currency, e.note, e.category_id, e.date, e.created_at, e.updated_at, e.user_id, c.name as category_name, c.icon as category_icon, c.color as category_color
 FROM expenses e
 JOIN categories c ON e.category_id = c.id
 WHERE
-    ($1::date IS NULL OR e.date >= $1::date)
-    AND ($2::date IS NULL OR e.date <= $2::date)
-    AND ($3::uuid IS NULL OR e.category_id = $3::uuid)
-    AND ($4::decimal IS NULL OR e.amount >= $4::decimal)
-    AND ($5::decimal IS NULL OR e.amount <= $5::decimal)
-    AND ($6::text IS NULL OR e.note ILIKE '%' || $6::text || '%')
+    e.user_id = $1::uuid
+    AND ($2::date IS NULL OR e.date >= $2::date)
+    AND ($3::date IS NULL OR e.date <= $3::date)
+    AND ($4::uuid IS NULL OR e.category_id = $4::uuid)
+    AND ($5::decimal IS NULL OR e.amount >= $5::decimal)
+    AND ($6::decimal IS NULL OR e.amount <= $6::decimal)
+    AND ($7::text IS NULL OR e.note ILIKE '%' || $7::text || '%')
 ORDER BY e.date DESC, e.created_at DESC
-LIMIT $8::int
-OFFSET $7::int
+LIMIT $9::int
+OFFSET $8::int
 `
 
 type ListExpensesParams struct {
+	UserID      pgtype.UUID    `json:"user_id"`
 	FromDate    pgtype.Date    `json:"from_date"`
 	ToDate      pgtype.Date    `json:"to_date"`
 	CategoryID  pgtype.UUID    `json:"category_id"`
@@ -166,6 +186,7 @@ type ListExpensesRow struct {
 	Date          pgtype.Date        `json:"date"`
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	UserID        pgtype.UUID        `json:"user_id"`
 	CategoryName  string             `json:"category_name"`
 	CategoryIcon  pgtype.Text        `json:"category_icon"`
 	CategoryColor pgtype.Text        `json:"category_color"`
@@ -173,6 +194,7 @@ type ListExpensesRow struct {
 
 func (q *Queries) ListExpenses(ctx context.Context, arg ListExpensesParams) ([]ListExpensesRow, error) {
 	rows, err := q.db.Query(ctx, listExpenses,
+		arg.UserID,
 		arg.FromDate,
 		arg.ToDate,
 		arg.CategoryID,
@@ -198,6 +220,7 @@ func (q *Queries) ListExpenses(ctx context.Context, arg ListExpensesParams) ([]L
 			&i.Date,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.UserID,
 			&i.CategoryName,
 			&i.CategoryIcon,
 			&i.CategoryColor,
@@ -215,8 +238,8 @@ func (q *Queries) ListExpenses(ctx context.Context, arg ListExpensesParams) ([]L
 const updateExpense = `-- name: UpdateExpense :one
 UPDATE expenses
 SET amount = $1, currency = $2, note = $3, category_id = $4, date = $5, updated_at = NOW()
-WHERE id = $6
-RETURNING id, amount, currency, note, category_id, date, created_at, updated_at
+WHERE id = $6 AND user_id = $7
+RETURNING id, amount, currency, note, category_id, date, created_at, updated_at, user_id
 `
 
 type UpdateExpenseParams struct {
@@ -226,6 +249,7 @@ type UpdateExpenseParams struct {
 	CategoryID pgtype.UUID    `json:"category_id"`
 	Date       pgtype.Date    `json:"date"`
 	ID         pgtype.UUID    `json:"id"`
+	UserID     pgtype.UUID    `json:"user_id"`
 }
 
 func (q *Queries) UpdateExpense(ctx context.Context, arg UpdateExpenseParams) (Expense, error) {
@@ -236,6 +260,7 @@ func (q *Queries) UpdateExpense(ctx context.Context, arg UpdateExpenseParams) (E
 		arg.CategoryID,
 		arg.Date,
 		arg.ID,
+		arg.UserID,
 	)
 	var i Expense
 	err := row.Scan(
@@ -247,6 +272,7 @@ func (q *Queries) UpdateExpense(ctx context.Context, arg UpdateExpenseParams) (E
 		&i.Date,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UserID,
 	)
 	return i, err
 }

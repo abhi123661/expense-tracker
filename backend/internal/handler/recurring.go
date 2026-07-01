@@ -12,7 +12,7 @@ import (
 
 // ListRecurring returns all recurring expenses
 func (s *Server) ListRecurring(w http.ResponseWriter, r *http.Request) {
-	recurring, err := s.queries.ListRecurring(r.Context())
+	recurring, err := s.queries.ListRecurring(r.Context(), GetUserID(r.Context()))
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Failed to fetch recurring expenses")
 		return
@@ -82,6 +82,7 @@ func (s *Server) CreateRecurring(w http.ResponseWriter, r *http.Request) {
 		CategoryID: categoryUUID,
 		Frequency:  req.Frequency,
 		NextDate:   nextDate,
+		UserID:     GetUserID(r.Context()),
 	})
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to create recurring expense: %v", err))
@@ -146,6 +147,7 @@ func (s *Server) UpdateRecurring(w http.ResponseWriter, r *http.Request) {
 		NextDate:   pgtype.Date{Time: nextDate, Valid: true},
 		Active:     pgtype.Bool{Bool: req.Active, Valid: true},
 		ID:         uuid,
+		UserID:     GetUserID(r.Context()),
 	})
 	if err != nil {
 		respondError(w, http.StatusNotFound, "Recurring expense not found")
@@ -163,7 +165,10 @@ func (s *Server) DeleteRecurring(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = s.queries.DeleteRecurring(r.Context(), uuid)
+	err = s.queries.DeleteRecurring(r.Context(), store.DeleteRecurringParams{
+		ID:     uuid,
+		UserID: GetUserID(r.Context()),
+	})
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Failed to delete recurring expense")
 		return
@@ -174,7 +179,11 @@ func (s *Server) DeleteRecurring(w http.ResponseWriter, r *http.Request) {
 // ProcessRecurring checks for due recurring expenses and creates them
 func (s *Server) ProcessRecurring(w http.ResponseWriter, r *http.Request) {
 	today := time.Now()
-	due, err := s.queries.GetDueRecurring(r.Context(), pgtype.Date{Time: today, Valid: true})
+	userID := GetUserID(r.Context())
+	due, err := s.queries.GetDueRecurring(r.Context(), store.GetDueRecurringParams{
+		NextDate: pgtype.Date{Time: today, Valid: true},
+		UserID:   userID,
+	})
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Failed to fetch due recurring expenses")
 		return
@@ -189,6 +198,7 @@ func (s *Server) ProcessRecurring(w http.ResponseWriter, r *http.Request) {
 			Note:       d.Note,
 			CategoryID: d.CategoryID,
 			Date:       pgtype.Date{Time: today, Valid: true},
+			UserID:     userID,
 		})
 		if err != nil {
 			continue
@@ -211,6 +221,7 @@ func (s *Server) ProcessRecurring(w http.ResponseWriter, r *http.Request) {
 			NextDate:   pgtype.Date{Time: nextDate, Valid: true},
 			Active:     d.Active,
 			ID:         d.ID,
+			UserID:     userID,
 		})
 		created++
 	}

@@ -315,7 +315,7 @@ expense_tracker/
 
 ---
 
-### Phase 4: Advanced Features
+### Phase 4: Advanced Features ⚠️ NOT IMPLEMENTED (skipped — recurring & multi-currency not needed)
 **Goal**: Recurring expenses, multi-currency, export
 
 **Steps**:
@@ -368,7 +368,7 @@ expense_tracker/
 
 ---
 
-### Phase 6 (Future): Multi-user & Auth
+### Phase 7 (Future): Multi-user & Auth
 **Goal**: Share with friends
 
 1. Add `users` table + `user_id` FK to all tables
@@ -454,3 +454,44 @@ npm run dev
 ```
 
 Open `http://localhost:5173` in Chrome → DevTools → Toggle device toolbar → select mobile device.
+
+---
+
+## Phase 6: Infinite Scroll + Filters + Custom Categories
+
+**Goal**: Better expense browsing with pagination, filtering, and user-created categories.
+
+### Phase 6A: Infinite Scroll in History
+
+1. Replace single `getExpenses({ limit: '50' })` with paginated loading — start at page 1, limit 20
+2. Add `IntersectionObserver` on a sentinel element at bottom of list. When visible → load next page → append to list
+3. Show "Loading more..." indicator while fetching
+4. Stop loading when `expenses.length >= total`
+5. Reset pagination when filters change
+
+### Phase 6B: Filter Panel in History
+
+6. Add "Filter" toggle button at top of History (funnel icon from lucide-react)
+7. Create collapsible filter section with:
+   - **Search**: text input (searches notes via `search` param)
+   - **Category**: dropdown using categories from API (sends `category_id`)
+   - **Date range**: `from` and `to` date inputs
+   - **Amount range**: `min_amount` and `max_amount` number inputs
+8. On filter change → reset expense list and page to 1 → re-fetch with filter params
+9. Show active filter count as badge on filter button
+
+### Phase 6C: Custom Category Creation
+
+10. Add "Create Category" section in Settings (below Budgets) with:
+    - Name input (required)
+    - Emoji/text input for icon
+    - Color picker (predefined palette of 8-10 colors)
+11. On submit → call `POST /api/categories` with `{ name, icon, color }`
+12. Show toast on success → new category appears in all category pickers
+
+### Verification
+- Scroll to bottom of History → more expenses load automatically
+- Apply category filter → only that category's expenses show
+- Apply date range → correct subset returned
+- Create custom category in Settings → shows in Add Expense picker
+- Search by note text → matching expenses appear

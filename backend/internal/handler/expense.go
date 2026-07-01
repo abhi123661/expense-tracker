@@ -67,6 +67,7 @@ func (s *Server) CreateExpense(w http.ResponseWriter, r *http.Request) {
 		Note:       pgtype.Text{String: req.Note, Valid: req.Note != ""},
 		CategoryID: categoryUUID,
 		Date:       date,
+		UserID:     GetUserID(r.Context()),
 	})
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to create expense: %v", err))
@@ -84,7 +85,10 @@ func (s *Server) GetExpense(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	expense, err := s.queries.GetExpense(r.Context(), uuid)
+	expense, err := s.queries.GetExpense(r.Context(), store.GetExpenseParams{
+		ID:     uuid,
+		UserID: GetUserID(r.Context()),
+	})
 	if err != nil {
 		respondError(w, http.StatusNotFound, "Expense not found")
 		return
@@ -151,6 +155,7 @@ func (s *Server) UpdateExpense(w http.ResponseWriter, r *http.Request) {
 		CategoryID: categoryUUID,
 		Date:       date,
 		ID:         uuid,
+		UserID:     GetUserID(r.Context()),
 	})
 	if err != nil {
 		respondError(w, http.StatusNotFound, "Expense not found")
@@ -168,7 +173,10 @@ func (s *Server) DeleteExpense(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = s.queries.DeleteExpense(r.Context(), uuid)
+	err = s.queries.DeleteExpense(r.Context(), store.DeleteExpenseParams{
+		ID:     uuid,
+		UserID: GetUserID(r.Context()),
+	})
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Failed to delete expense")
 		return
@@ -192,7 +200,9 @@ func (s *Server) ListExpenses(w http.ResponseWriter, r *http.Request) {
 	offset := (page - 1) * limit
 
 	// Build filter params
+	userID := GetUserID(r.Context())
 	params := store.ListExpensesParams{
+		UserID:      userID,
 		QueryLimit:  int32(limit),
 		QueryOffset: int32(offset),
 	}
@@ -245,6 +255,7 @@ func (s *Server) ListExpenses(w http.ResponseWriter, r *http.Request) {
 
 	// Get total count for pagination
 	countParams := store.CountExpensesParams{
+		UserID:     userID,
 		FromDate:   params.FromDate,
 		ToDate:     params.ToDate,
 		CategoryID: params.CategoryID,
